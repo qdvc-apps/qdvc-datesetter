@@ -83,6 +83,7 @@ template geometry, matching the other QDVC apps. `--preview` also writes
 | `Bytes.swift` | bounds-checked integer reads/writes on `[UInt8]`, `Endian`, `BytePatch` |
 | `Errors.swift` | `DatesetterError` and its messages |
 | `ExifDateTime.swift` | the date (plain fields, no time zone), parsing typed and EXIF text, formatting; `OffsetTime` |
+| `DateSequence.swift` | date arithmetic (`secondsSinceEpoch`, `adding(seconds:)`, Hinnant's days-from-civil), `DateStep` and `sequence(from:step:count:)` |
 | `TIFF.swift` | `ExifDateField`, `TIFFBlock`: reading IFD0 and the Exif IFD, `setting(_:)` (patches or an extended block) |
 | `JPEG.swift` | `JPEGLayout` (segments up to SOS), `JPEGEditor` (plan, APP1, protected bytes) |
 | `HEIF.swift` | `ISOBox`, `HEIFLayout` (meta, iinf, iloc, pitm, idat, iprp; item data; protected content), `HEIFEditor` (patch, repoint, add an EXIF item) |
@@ -103,6 +104,9 @@ to the main actor. Errors cross as `DatesetterError` (Sendable).
 
 - Dates: every accepted form parses; impossible dates, blanks and junk don't;
   formatting round-trips; conversion through a time zone round-trips.
+- Sequences: adding crosses days, months, years and leap days, has no
+  daylight-saving jumps, refuses to leave years 1–9999, agrees with
+  Foundation on seconds since 1970; steps clamp to 1 and describe themselves.
 - JPEG: all dates present → three patches, same size, at most 57 bytes
   changed; no EXIF → a new APP1 after APP0 (or SOI), everything else
   identical; missing dates → added without moving existing bytes (MakerNote

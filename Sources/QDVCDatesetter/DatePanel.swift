@@ -51,6 +51,35 @@ struct DatePanel: View {
                 Spacer(minLength: 0)
             }
 
+            HStack(spacing: 8) {
+                Toggle("Add", isOn: $model.stepEnabled)
+                Group {
+                    TextField("Amount", value: $model.stepAmount, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 64)
+                    Stepper("Amount", value: $model.stepAmount, in: 1...DateStep.maximumAmount)
+                        .labelsHidden()
+                    Picker("Unit", selection: $model.stepUnit) {
+                        ForEach(DateStep.Unit.allCases, id: \.self) { unit in
+                            Text(unit.rawValue).tag(unit)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    Text("to each next photo, in the list's order")
+                }
+                .disabled(!model.stepEnabled)
+                if model.sequenceOutOfRange {
+                    Label("The dates would run past 9999-12-31", systemImage: "exclamationmark.circle.fill")
+                        .foregroundStyle(.red)
+                        .font(.callout)
+                }
+                Spacer(minLength: 0)
+            }
+            .help("The photo at the top of the list gets the new date, the next one this much more, and so on. Sort the list (by Name or Date Taken, say) to set the order; the New Date column shows each photo's date.")
+
             Toggle("Also set each file's created and modified dates to the new date", isOn: $model.matchFileDates)
                 .help("The dates Finder shows for the file, read in the photo's own time zone if it recorded one, otherwise this Mac's. PNG files always get these, since they have no EXIF dates.")
 

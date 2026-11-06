@@ -33,6 +33,9 @@ struct PhotoItem: Identifiable {
     var digitizedKey: String { metadata?.digitized?.displayString ?? "" }
     var modifiedKey: String { metadata?.modified?.displayString ?? "" }
     var fileCreatedKey: String { Self.local(fileDates?.created)?.displayString ?? "" }
+    /// For the New Date column: every row compares equal, so clicking its
+    /// heading leaves the order (which decides the sequence) as it is.
+    var unsortedKey: Int { 0 }
     var fileModifiedKey: String { Self.local(fileDates?.modified)?.displayString ?? "" }
 
     /// A file date as a wall-clock reading in this Mac's time zone.
@@ -63,6 +66,8 @@ final class AppModel {
 
     private enum Keys {
         static let matchFileDates = "matchFileDates"
+        static let stepAmount = "stepAmount"
+        static let stepUnit = "stepUnit"
     }
 
     var photos: [PhotoItem] = []
@@ -84,6 +89,17 @@ final class AppModel {
         didSet { UserDefaults.standard.set(matchFileDates, forKey: Keys.matchFileDates) }
     }
 
+    /// Whether each next photo gets a later date (off at every launch, so a
+    /// sequence is never applied by surprise).
+    var stepEnabled = false
+    /// The step: remembered between launches.
+    var stepAmount: Int {
+        didSet { UserDefaults.standard.set(stepAmount, forKey: Keys.stepAmount) }
+    }
+    var stepUnit: DateStep.Unit {
+        didSet { UserDefaults.standard.set(stepUnit.rawValue, forKey: Keys.stepUnit) }
+    }
+
     var showImporter = false
     var showConfirmation = false
     var isApplying = false
@@ -102,6 +118,29 @@ final class AppModel {
         dateText = now.displayString
         lastValidDate = now
         matchFileDates = UserDefaults.standard.object(forKey: Keys.matchFileDates) as? Bool ?? true
+        stepAmount = UserDefaults.standard.object(forKey: Keys.stepAmount) as? Int ?? 1
+        stepUnit = UserDefaults.standard.string(forKey: Keys.stepUnit).flatMap(DateStep.Unit.init(rawValue:)) ?? .seconds
+    }
+
+    /// The step between photos, or nil when every photo gets the same date.
+    var step: DateStep? {
+        stepEnabled ? DateStep(amount: stepAmount, unit: stepUnit) : nil
+    }
+
+    /// The date each readable photo will get, in the list's current order:
+    /// the first gets the new date, each next one the step more. Empty if
+    /// the typed date is invalid or the sequence would pass year 9999.
+    var plannedDates: [PhotoItem.ID: ExifDateTime] {
+        guard let start = parsedDate else { return [:] }
+        let ids = photos.filter(\.canBeChanged).map(\.id)
+        guard let dates = DateStep.sequence(from: start, step: step, count: ids.count) else { return [:] }
+        return Dictionary(uniqueKeysWithValues: zip(ids, dates))
+    }
+
+    /// Whether the sequence runs past the last date EXIF can hold.
+    var sequenceOutOfRange: Bool {
+        guard let start = parsedDate else { return false }
+        return DateStep.sequence(from: start, step: step, count: changeableCount) == nil
     }
 
     // MARK: The date
@@ -246,7 +285,7 @@ final class AppModel {
     var changeableCount: Int { photos.filter(\.canBeChanged).count }
 
     var canApply: Bool {
-        !isApplying && parsedDate != nil && changeableCount > 0
+        !isApplying && parsedDate != nil && changeableCount > 0 && !sequenceOutOfRange
             && !photos.contains { $0.status == .loading }
     }
 
@@ -271,23 +310,31 @@ final class AppModel {
     }
 
     var confirmationMessage: String {
-        guard let date = parsedDate else { return "" }
+        let ids = photos.filter(\.canBeChanged).map(\.id)
+        let planned = plannedDates
+        guard let first = ids.first.flatMap({ planned[$0] }), let last = ids.last.flatMap({ planned[$0] }) else {
+            return ""
+        }
+        var text: String
+        if let step = step, ids.count > 1 {
+            text = "In the list's order, the first photo gets \(first.displayString) and each next one \(step) more, "
+            text += "up to \(last.displayString) for the last."
+        } else {
+            text = "\(ids.count == 1 ? "The photo gets" : "Every photo gets") \(first.displayString)."
+        }
         let exifCount = changeableCount - pngCount
-        var text = ""
         if exifCount > 0 {
-            text += "Date Taken, Date Digitized and Date Modified in the EXIF data of \(Self.count(exifCount, "photo")) will be set to \(date.displayString)."
-            if matchFileDates {
-                text += " Each file's created and modified dates will be set to match."
-            }
+            text += " For \(Self.count(exifCount, "JPEG or HEIC photo", "JPEG or HEIC photos")), that's Date Taken,"
+            text += " Date Digitized and Date Modified in the EXIF data"
+            text += matchFileDates ? ", and the file's created and modified dates." : "."
         }
         if pngCount > 0 {
-            if !text.isEmpty { text += " " }
             let one = pngCount == 1
             let have = one ? "has" : "have"
             let their = one ? "its" : "their"
             let files = one ? "file itself isn't" : "files themselves aren't"
-            text += "\(Self.count(pngCount, "PNG file")) \(have) no EXIF dates, so \(their) created and modified dates"
-            text += " will be set to \(date.displayString) instead; the \(files) changed."
+            text += " \(Self.count(pngCount, "PNG file")) \(have) no EXIF dates, so \(their) created and modified dates"
+            text += " are set instead; the \(files) changed."
         }
         let skipped = photos.count - changeableCount
         if skipped > 0 {
@@ -298,9 +345,13 @@ final class AppModel {
     }
 
     func applyDate() {
-        guard let date = parsedDate, !isApplying else { return }
-        let jobs = photos.filter(\.canBeChanged).map { (id: $0.id, url: $0.url) }
-        guard !jobs.isEmpty else { return }
+        guard parsedDate != nil, !isApplying else { return }
+        // Each photo's date is fixed now, from the order the list is in.
+        let planned = plannedDates
+        let jobs = photos.filter(\.canBeChanged).compactMap { item in
+            planned[item.id].map { (id: item.id, url: item.url, date: $0) }
+        }
+        guard !jobs.isEmpty, jobs.count == changeableCount else { return }
         let match = matchFileDates
         isApplying = true
         progress = 0
@@ -313,6 +364,7 @@ final class AppModel {
             for (n, job) in jobs.enumerated() {
                 update(job.id) { $0.status = .writing }
                 let url = job.url
+                let date = job.date
                 let outcome = await Task.detached(priority: .userInitiated) { () -> Result<UpdateResult, DatesetterError> in
                     do {
                         return .success(try PhotoFileUpdater.setDate(date, of: url, matchFileDates: match))
@@ -339,7 +391,11 @@ final class AppModel {
             }
             isApplying = false
             sortPhotos()
-            var summary = "Set the date of \(Self.count(updated, "photo")) to \(date.displayString)."
+            let first = jobs[0].date
+            let last = jobs[jobs.count - 1].date
+            var summary = first == last
+                ? "Set the date of \(Self.count(updated, "photo")) to \(first.displayString)."
+                : "Set the dates of \(Self.count(updated, "photo")), from \(first.displayString) to \(last.displayString)."
             if !failures.isEmpty { summary += " \(Self.count(failures.count, "photo")) failed." }
             message = summary
             if !failures.isEmpty {
@@ -375,8 +431,8 @@ final class AppModel {
         return .updated(title, detail)
     }
 
-    static func count(_ n: Int, _ noun: String) -> String {
-        "\(n) \(noun)\(n == 1 ? "" : "s")"
+    static func count(_ n: Int, _ noun: String, _ plural: String? = nil) -> String {
+        "\(n) \(n == 1 ? noun : plural ?? noun + "s")"
     }
 }
 

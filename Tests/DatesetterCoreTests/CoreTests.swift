@@ -50,6 +50,47 @@ final class ExifDateTimeTests: XCTestCase {
     }
 }
 
+final class DateSequenceTests: XCTestCase {
+    func d(_ text: String) -> ExifDateTime { ExifDateTime.parse(text)! }
+
+    func testAddingCrossesDaysMonthsYearsAndLeapDays() {
+        XCTAssertEqual(d("2024-02-28 23:59:59").adding(seconds: 1), d("2024-02-29 00:00:00"))
+        XCTAssertEqual(d("2023-02-28 23:59:59").adding(seconds: 1), d("2023-03-01 00:00:00"))
+        XCTAssertEqual(d("2023-12-31 23:59:50").adding(seconds: 10), d("2024-01-01 00:00:00"))
+        XCTAssertEqual(d("2024-03-01 00:00:00").adding(seconds: -1), d("2024-02-29 23:59:59"))
+        XCTAssertEqual(d("1969-12-31 23:59:59").adding(seconds: 1), d("1970-01-01 00:00:00"))
+        // Wall-clock time: no daylight-saving jump.
+        XCTAssertEqual(d("2024-03-31 01:59:59").adding(seconds: 3_600), d("2024-03-31 02:59:59"))
+        XCTAssertNil(d("9999-12-31 23:59:59").adding(seconds: 1))
+        XCTAssertNil(d("0001-01-01 00:00:00").adding(seconds: -1))
+        XCTAssertNil(d("2024-01-01").adding(seconds: Int.max))
+    }
+
+    func testSecondsSinceEpochMatchesFoundation() {
+        let utc = TimeZone(identifier: "UTC")!
+        for text in ["1970-01-01", "2000-02-29 12:34:56", "2038-01-19 03:14:08", "1901-12-13 20:45:52", "2399-12-31 23:59:59"] {
+            let date = d(text)
+            XCTAssertEqual(TimeInterval(date.secondsSinceEpoch), date.date(in: utc)!.timeIntervalSince1970, text)
+            XCTAssertEqual(ExifDateTime(secondsSinceEpoch: date.secondsSinceEpoch), date, text)
+        }
+    }
+
+    func testSequences() {
+        let start = d("2024-05-01 23:59:50")
+        XCTAssertEqual(DateStep.sequence(from: start, step: nil, count: 3), [start, start, start])
+        XCTAssertEqual(DateStep.sequence(from: start, step: DateStep(amount: 10, unit: .seconds), count: 3),
+                       [start, d("2024-05-02 00:00:00"), d("2024-05-02 00:00:10")])
+        XCTAssertEqual(DateStep.sequence(from: start, step: DateStep(amount: 1, unit: .days), count: 2),
+                       [start, d("2024-05-02 23:59:50")])
+        XCTAssertEqual(DateStep.sequence(from: start, step: DateStep(amount: 1, unit: .seconds), count: 0), [])
+        XCTAssertNil(DateStep.sequence(from: d("9999-12-31 23:59:58"), step: DateStep(amount: 1, unit: .seconds), count: 3))
+        XCTAssertEqual(DateStep(amount: 0, unit: .minutes).amount, 1)
+        XCTAssertEqual(DateStep(amount: 1, unit: .minutes).description, "1 minute")
+        XCTAssertEqual(DateStep(amount: 90, unit: .minutes).description, "90 minutes")
+        XCTAssertEqual(DateStep(amount: 2, unit: .hours).seconds, 7_200)
+    }
+}
+
 final class JPEGTests: XCTestCase {
     let newDate = ExifDateTime.parse("2019-12-24 18:00:30")!
 

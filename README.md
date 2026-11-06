@@ -30,9 +30,20 @@ never touches the network (see [No network](#no-network)).
    the date taken of the selected photo into the box, to start from it (for
    a PNG, or a photo without EXIF dates, its file's created date);
    Photos › Set Date to Now (⇧⌘N) puts in the current time.
+
+   To give the photos a **sequence** of dates rather than one, tick **Add**
+   below the date and choose a step (for example 1 second, 10 seconds,
+   5 minutes, 1 day): the photo at the top of the list gets the new date,
+   the next one the step more, the next twice the step more, and so on. The
+   order is the list's: sort it by Name or Date Taken (say) first. The
+   **New Date** column shows the date each photo will get, so you can check
+   before confirming. Photos that can't be read are skipped and don't use up
+   a step. The step is remembered; the Add box starts unticked at each
+   launch, so a sequence is never applied by surprise. Steps are plain
+   wall-clock time, so a sequence never jumps at a daylight-saving change.
 3. **Set it.** Click **Set Date on N Photos…** (⌘↩). A confirmation says
    exactly what will happen; on **Set Date** every photo in the list gets the
-   new date in all three EXIF date fields. The Status column then says what
+   new date (or its date in the sequence) in all three EXIF date fields. The Status column then says what
    was done to each photo (hover for details), and a summary appears under the
    notice. Photos that couldn't be changed are listed in an alert and left
    exactly as they were.

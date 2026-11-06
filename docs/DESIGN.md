@@ -33,6 +33,7 @@ ad-hoc-signed bundle built by `scripts/build-app.sh`.
 │ …                                                                      │
 ├────────────────────────────────────────────────────────────────────────┤
 │ New date: [2023-07-01 09:30:00] [date ⇅ time ⇅] [📅] [Use Selected…]  │
+│ [ ] Add [   10][⇅] [seconds ▾] to each next photo, in the list's order │
 │ [✓] Also set each file's created and modified dates to the new date    │
 │ ⚠ Changes are written to your photos as soon as you confirm. No        │
 │   backups are made.                     [ Set Date on 12 Photos… ]     │
@@ -54,7 +55,8 @@ entry shows a red hint and disables the button; the pickers then keep the
 last valid date.
 
 The date is applied to every readable photo in the list, not to the
-selection: what you see listed is what changes. Photos that couldn't be read
+selection: what you see listed is what changes, and the New Date column
+shows exactly what each photo will get. Photos that couldn't be read
 are listed with "Can't be read" and skipped.
 
 ## 3. Writing EXIF
@@ -114,8 +116,18 @@ is the container inside the sandbox).
 - **Missing dates:** added, by extending the EXIF data as in §3, for JPEG
   and HEIC.
 - **Extras:** setting the file's created and modified dates to match (on by
-  default; a switch in the window). Shift-by-offset, sequential dates and a
-  log of old dates were offered and not chosen.
+  default; a switch in the window). Shift-by-offset and a log of old dates
+  were offered and not chosen.
+- **Sequences** (added later): optionally, each next photo in the list's
+  order gets a fixed step more (seconds, minutes, hours or days; 1 to
+  999,999). The order is whatever the list is sorted by, so the user
+  controls it with the column headings; the New Date column previews every
+  photo's date and doesn't sort itself (that would be circular). Unreadable
+  photos don't take a step. Arithmetic is on the EXIF wall-clock reading
+  (`ExifDateTime.adding(seconds:)`, proleptic Gregorian, no time zone), so
+  there are no daylight-saving jumps; a sequence that would pass 9999-12-31
+  disables Set Date. The step is remembered, but the Add box is off at each
+  launch. All dates are fixed when Set Date is confirmed.
 - **No network:** App Sandbox without network entitlements, no package
   dependencies, and source and binary checks in the build.
 - **No backups**, with a permanent notice in the window and in the

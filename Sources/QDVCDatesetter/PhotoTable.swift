@@ -7,11 +7,19 @@ struct PhotoTable: View {
 
     var body: some View {
         @Bindable var model = model
+        let planned = model.plannedDates
         Table(model.photos, selection: $model.selection, sortOrder: $model.sortOrder) {
             TableColumn("Name", value: \.name) { item in
                 NameCell(item: item)
             }
             .width(min: 180, ideal: 250)
+
+            // What Set Date will give each photo. Sorting by it would be
+            // circular (the order decides the sequence), so it doesn't sort.
+            TableColumn("New Date", sortUsing: KeyPathComparator(\.unsortedKey)) { item in
+                NewDateCell(date: planned[item.id], applying: model.isApplying)
+            }
+            .width(min: 140, ideal: 150)
 
             TableColumn("Date Taken", value: \.takenKey) { item in
                 DateCell(date: item.metadata?.original, metadata: item.metadata)
@@ -109,6 +117,21 @@ private struct DateCell: View {
         } else if metadata != nil {
             Text("none")
                 .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// The date a photo will get.
+private struct NewDateCell: View {
+    let date: ExifDateTime?
+    let applying: Bool
+
+    var body: some View {
+        if let date, !applying {
+            Text(date.displayString)
+                .monospacedDigit()
+                .foregroundStyle(.tint)
+                .help("The date this photo will get when you click Set Date.")
         }
     }
 }
