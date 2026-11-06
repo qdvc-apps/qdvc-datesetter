@@ -20,6 +20,7 @@ struct PhotoItem: Identifiable {
     let id = UUID()
     let url: URL
     var metadata: PhotoMetadata?
+    var fileDates: FileDates?
     var status: Status = .loading
 
     var name: String { url.lastPathComponent }
@@ -31,6 +32,13 @@ struct PhotoItem: Identifiable {
     var takenKey: String { metadata?.original?.displayString ?? "" }
     var digitizedKey: String { metadata?.digitized?.displayString ?? "" }
     var modifiedKey: String { metadata?.modified?.displayString ?? "" }
+    var fileCreatedKey: String { Self.local(fileDates?.created)?.displayString ?? "" }
+    var fileModifiedKey: String { Self.local(fileDates?.modified)?.displayString ?? "" }
+
+    /// A file date as a wall-clock reading in this Mac's time zone.
+    static func local(_ date: Date?) -> ExifDateTime? {
+        date.map { ExifDateTime(date: $0, in: .current) }
+    }
     var statusKey: String {
         switch status {
         case .loading: return "0"
@@ -116,13 +124,14 @@ final class AppModel {
         dateText = ExifDateTime(date: Date(), in: .current).displayString
     }
 
-    /// The date taken (or, failing that, another EXIF date) of the single
-    /// selected photo.
+    /// The date taken (or, failing that, another EXIF date, or the file's
+    /// created date, as for a PNG) of the single selected photo.
     var selectedPhotoDate: ExifDateTime? {
         guard selection.count == 1, let id = selection.first,
-              let m = photos.first(where: { $0.id == id })?.metadata
+              let item = photos.first(where: { $0.id == id }),
+              let m = item.metadata
         else { return nil }
-        return m.original ?? m.digitized ?? m.modified
+        return m.original ?? m.digitized ?? m.modified ?? PhotoItem.local(item.fileDates?.created)
     }
 
     func useSelectedPhotoDate() {
@@ -146,7 +155,7 @@ final class AppModel {
             var notes = ["Added \(Self.count(items.count, "photo"))."]
             let duplicates = found.photos.count - items.count
             if duplicates > 0 { notes.append("\(Self.count(duplicates, "photo")) already in the list.") }
-            if found.notPhotos > 0 { notes.append("Skipped \(Self.count(found.notPhotos, "file")) that aren't JPEG or HEIC.") }
+            if found.notPhotos > 0 { notes.append("Skipped \(Self.count(found.notPhotos, "file")) that aren't JPEG, HEIC or PNG.") }
             if found.inPhotosLibrary > 0 {
                 notes.append("Skipped \(Self.count(found.inPhotosLibrary, "item")) inside a Photos library, which manages its own files.")
             }
@@ -207,6 +216,7 @@ final class AppModel {
     private func loadMetadata(_ ids: [PhotoItem.ID]) async {
         for id in ids {
             guard let url = photos.first(where: { $0.id == id })?.url else { continue }
+            let fileDates = await Task.detached(priority: .userInitiated) { FileDates.read(url) }.value
             let outcome = await Task.detached(priority: .userInitiated) { () -> Result<PhotoMetadata, DatesetterError> in
                 do {
                     return .success(try PhotoInspector.read(contentsOf: url))
@@ -217,6 +227,7 @@ final class AppModel {
                 }
             }.value
             update(id) { item in
+                item.fileDates = fileDates
                 switch outcome {
                 case .success(let metadata):
                     item.metadata = metadata
@@ -254,11 +265,29 @@ final class AppModel {
         "Set the date of \(Self.count(changeableCount, "photo"))?"
     }
 
+    /// Readable PNGs, which get file dates only.
+    var pngCount: Int {
+        photos.filter { $0.metadata?.format == .png }.count
+    }
+
     var confirmationMessage: String {
         guard let date = parsedDate else { return "" }
-        var text = "Date Taken, Date Digitized and Date Modified in each photo's EXIF data will be set to \(date.displayString)."
-        if matchFileDates {
-            text += " Each file's created and modified dates will be set to match."
+        let exifCount = changeableCount - pngCount
+        var text = ""
+        if exifCount > 0 {
+            text += "Date Taken, Date Digitized and Date Modified in the EXIF data of \(Self.count(exifCount, "photo")) will be set to \(date.displayString)."
+            if matchFileDates {
+                text += " Each file's created and modified dates will be set to match."
+            }
+        }
+        if pngCount > 0 {
+            if !text.isEmpty { text += " " }
+            let one = pngCount == 1
+            let have = one ? "has" : "have"
+            let their = one ? "its" : "their"
+            let files = one ? "file itself isn't" : "files themselves aren't"
+            text += "\(Self.count(pngCount, "PNG file")) \(have) no EXIF dates, so \(their) created and modified dates"
+            text += " will be set to \(date.displayString) instead; the \(files) changed."
         }
         let skipped = photos.count - changeableCount
         if skipped > 0 {
@@ -298,6 +327,7 @@ final class AppModel {
                     updated += 1
                     update(job.id) { item in
                         item.metadata = result.metadata
+                        item.fileDates = result.fileDates
                         item.status = Self.status(for: result)
                     }
                 case .failure(let error):
@@ -334,6 +364,9 @@ final class AppModel {
         case .exifCreated:
             title = "Updated (EXIF added)"
             detail = "The photo had no EXIF data, so an EXIF block with the three dates was added. The image data was copied unchanged."
+        case .fileDatesOnly:
+            title = "Updated (file dates)"
+            detail = "PNG files have no EXIF dates, so the file's created and modified dates were set. The file itself wasn't changed."
         }
         if let error = result.fileDatesError {
             title += ", file dates not set"

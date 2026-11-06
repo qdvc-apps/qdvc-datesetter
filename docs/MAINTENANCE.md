@@ -86,7 +86,7 @@ template geometry, matching the other QDVC apps. `--preview` also writes
 | `TIFF.swift` | `ExifDateField`, `TIFFBlock`: reading IFD0 and the Exif IFD, `setting(_:)` (patches or an extended block) |
 | `JPEG.swift` | `JPEGLayout` (segments up to SOS), `JPEGEditor` (plan, APP1, protected bytes) |
 | `HEIF.swift` | `ISOBox`, `HEIFLayout` (meta, iinf, iloc, pitm, idat, iprp; item data; protected content), `HEIFEditor` (patch, repoint, add an EXIF item) |
-| `DateWriter.swift` | `PhotoFormat`, `EditPlan`, `PhotoMetadata`, `PhotoInspector`, `DateWriter` (plan + verify), `PhotoFileUpdater` (write, read back, file dates), `PhotoScanner` |
+| `DateWriter.swift` | `PhotoFormat` (JPEG, HEIC, PNG), `EditPlan`, `PhotoMetadata`, `PhotoInspector`, `DateWriter` (plan + verify), `FileDates`, `PhotoFileUpdater` (write, read back, file dates; PNG: file dates only), `PhotoScanner` |
 
 The app (`QDVCDatesetter`): `DatesetterApp` (window, delegate: Dock drops,
 no quitting mid-write; menus), `AppModel` (photos, the date text, adding
@@ -115,8 +115,9 @@ to the main actor. Errors cross as `DatesetterError` (Sendable).
   image item's data identical; AVIF is not taken for HEIC.
 - Files: the date is written and read back, the modification date follows
   the photo's own time zone; a growing file is rewritten; a broken file is
-  left byte-for-byte as it was.
-- Scanner: photos found in folders by extension, hidden files and Photos
+  left byte-for-byte as it was; a PNG gets its file dates (even with the
+  switch off) and its bytes are untouched.
+- Scanner: photos (PNG included) found in folders by extension, hidden files and Photos
   libraries skipped, a file chosen directly is recognised by its contents.
 
 There are no image files in the repository: the tests build their JPEG and

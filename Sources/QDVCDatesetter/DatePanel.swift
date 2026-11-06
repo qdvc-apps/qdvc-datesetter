@@ -52,7 +52,7 @@ struct DatePanel: View {
             }
 
             Toggle("Also set each file's created and modified dates to the new date", isOn: $model.matchFileDates)
-                .help("The dates Finder shows for the file. Read in the photo's own time zone if it recorded one, otherwise this Mac's.")
+                .help("The dates Finder shows for the file, read in the photo's own time zone if it recorded one, otherwise this Mac's. PNG files always get these, since they have no EXIF dates.")
 
             HStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill")

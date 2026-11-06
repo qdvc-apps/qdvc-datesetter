@@ -53,7 +53,7 @@ struct ContentView: View {
         }
         .navigationSubtitle(subtitle)
         .fileImporter(isPresented: $model.showImporter,
-                      allowedContentTypes: [.jpeg, .heic, .heif, .folder],
+                      allowedContentTypes: [.jpeg, .heic, .heif, .png, .folder],
                       allowsMultipleSelection: true) { result in
             model.importChosen(result)
         }
@@ -90,9 +90,9 @@ struct DropPrompt: View {
             Image(systemName: "photo.stack")
                 .font(.system(size: 52, weight: .light))
                 .foregroundStyle(.secondary)
-            Text("Drop JPEG or HEIC photos here")
+            Text("Drop JPEG, HEIC or PNG photos here")
                 .font(.title2)
-            Text("Folders work too: every JPEG and HEIC inside them is added.")
+            Text("Folders work too: every JPEG, HEIC and PNG inside them is added.")
                 .foregroundStyle(.secondary)
             Button("Add Photos…") { model.showImporter = true }
                 .controlSize(.large)

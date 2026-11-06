@@ -295,6 +295,27 @@ final class FileTests: XCTestCase {
         XCTAssertEqual(try PhotoInspector.read(written).original, date)
     }
 
+    func testPNGGetsFileDatesOnly() throws {
+        let url = folder.appendingPathComponent("screenshot.png")
+        let original = Fixture.png()
+        try Data(original).write(to: url)
+        XCTAssertEqual(try PhotoFormat.detect(original), .png)
+        let before = try PhotoInspector.read(contentsOf: url)
+        XCTAssertEqual(before.format, .png)
+        XCTAssertFalse(before.format.hasExifDates)
+        XCTAssertNil(before.original)
+        XCTAssertThrowsError(try DateWriter.plan(original, date: ExifDateTime.parse("2015-06-07")!))
+
+        // File dates are set even with matchFileDates off: they're all a PNG has.
+        let date = ExifDateTime.parse("2015-06-07 08:09:10")!
+        let utc = TimeZone(identifier: "UTC")!
+        let result = try PhotoFileUpdater.setDate(date, of: url, matchFileDates: false, fallbackTimeZone: utc)
+        XCTAssertEqual(result.method, .fileDatesOnly)
+        XCTAssertEqual([UInt8](try Data(contentsOf: url)), original)
+        let modified = try XCTUnwrap(result.fileDates.modified)
+        XCTAssertEqual(modified.timeIntervalSince1970, date.date(in: utc)!.timeIntervalSince1970, accuracy: 1)
+    }
+
     func testLeavesABrokenFileAlone() throws {
         let url = folder.appendingPathComponent("c.jpg")
         let broken = Array(Fixture.jpeg(exif: Fixture.fullTIFF()).prefix(40))
@@ -311,12 +332,13 @@ final class FileTests: XCTestCase {
         for name in ["trip/1.JPG", "trip/2.heic", "trip/.hidden.jpg", "Photos Library.photoslibrary/originals/x.jpg"] {
             try Data(Fixture.jpeg(exif: nil)).write(to: folder.appendingPathComponent(name))
         }
+        try Data(Fixture.png()).write(to: sub.appendingPathComponent("3.png"))
         try Data("not a photo".utf8).write(to: sub.appendingPathComponent("notes.txt"))
         let unnamed = folder.appendingPathComponent("photo-without-extension")
         try Data(Fixture.jpeg(exif: nil)).write(to: unnamed)
 
         let found = PhotoScanner.collect([folder])
-        XCTAssertEqual(found.photos.map(\.lastPathComponent), ["1.JPG", "2.heic"])
+        XCTAssertEqual(found.photos.map(\.lastPathComponent), ["1.JPG", "2.heic", "3.png"])
 
         let direct = PhotoScanner.collect([unnamed, sub.appendingPathComponent("notes.txt")])
         XCTAssertEqual(direct.photos.map(\.lastPathComponent), ["photo-without-extension"])

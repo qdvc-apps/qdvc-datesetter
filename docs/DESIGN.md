@@ -3,7 +3,8 @@
 Status: **first implementation written.** The decisions taken with the user
 are recorded in §5.
 
-QDVC Datesetter sets the EXIF dates of a batch of photos. It follows the
+QDVC Datesetter sets the EXIF dates of a batch of JPEG and HEIC photos,
+and the file dates of PNGs. It follows the
 approach of the other QDVC macOS apps (Progress, Response Letter, Meetings,
 Nice Mail, Bibliotheca, GTD EML): a Foundation-only core library with unit
 tests, a SwiftUI/AppKit front-end, no Xcode project file, and an
@@ -90,6 +91,9 @@ file throws; it never traps).
   data of every non-EXIF item, `iprp` and `pitm`), all three dates must read
   back, and a patch plan must change nothing else. After writing, the file is
   read back and compared.
+- **PNG**: recognised by its signature from the first bytes (the file is
+  not read further); `PhotoFileUpdater.setDate` only sets the creation and
+  modification dates (`UpdateMethod.fileDatesOnly`).
 - **Writing**: in place through a file handle (patches, or the whole file
   then truncate), so the inode and its attributes survive and no temporary
   file or folder access is needed under the sandbox.
@@ -116,3 +120,9 @@ is the container inside the sandbox).
   dependencies, and source and binary checks in the build.
 - **No backups**, with a permanent notice in the window and in the
   confirmation.
+- **PNG** (added later): PNGs are listed too; having no EXIF dates, they
+  get their file's created and modified dates set, whatever the file-dates
+  switch says, and are never opened for writing. The confirmation counts
+  them separately, the EXIF columns show "n/a", and File Created / File
+  Modified columns show every file's own dates. (PNG's optional eXIf chunk
+  is not read or written.)

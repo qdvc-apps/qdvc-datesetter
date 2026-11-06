@@ -1,6 +1,8 @@
 # QDVC Datesetter for macOS
 
-Drop JPEG and HEIC photos onto a window and set their EXIF dates in bulk.
+Drop JPEG, HEIC and PNG photos onto a window and set their dates in bulk: the
+EXIF dates of JPEG and HEIC photos, and the file dates of PNGs (which have no
+EXIF dates).
 
 A native SwiftUI and AppKit app for macOS 14 (Sonoma) and later. See
 [Build and run](#build-and-run) to get started on your Mac.
@@ -11,19 +13,22 @@ never touches the network (see [No network](#no-network)).
 
 ## What it does
 
-1. **Add photos.** Drop JPEG or HEIC files, or whole folders, on the window
+1. **Add photos.** Drop JPEG, HEIC or PNG files, or whole folders, on the window
    (or the Dock icon), or choose File › Add Photos… (⌘O). Folders are
    searched all the way down; hidden files and anything inside a Photos
    library are skipped. Each photo is listed with a thumbnail and its three
    EXIF dates: **Date Taken** (DateTimeOriginal), **Date Digitized**
-   (DateTimeDigitized) and **Date Modified** (DateTime). "none" means the
-   photo has no such date.
+   (DateTimeDigitized) and **Date Modified** (DateTime), and the file's own
+   **File Created** and **File Modified** dates (as Finder shows them, in
+   this Mac's time zone). "none" means the photo has no such date; "n/a"
+   marks the EXIF columns of a PNG.
 2. **Choose the new date.** Type it as `YYYY-MM-DD HH:MM:SS` in the box at the
    bottom, or use the date-and-time stepper or the calendar button beside it.
    `YYYY-MM-DD HH:MM` and `YYYY-MM-DD` work too (missing time parts are 00),
    as do EXIF's own `YYYY:MM:DD HH:MM:SS` and an ISO `T`. A date that doesn't
    exist (2023-02-29) is refused. **Use Selected Photo's Date** (⇧⌘D) copies
-   the date taken of the selected photo into the box, to start from it;
+   the date taken of the selected photo into the box, to start from it (for
+   a PNG, or a photo without EXIF dates, its file's created date);
    Photos › Set Date to Now (⇧⌘N) puts in the current time.
 3. **Set it.** Click **Set Date on N Photos…** (⌘↩). A confirmation says
    exactly what will happen; on **Set Date** every photo in the list gets the
@@ -40,6 +45,13 @@ dates Finder shows for each file to the same moment. EXIF dates carry no time
 zone, so the moment is read in the photo's own time zone if the camera
 recorded one (OffsetTimeOriginal, as iPhones do), otherwise in this Mac's.
 
+**PNG files** have no EXIF dates, so for them the app sets the file's
+created and modified dates to the new date (in this Mac's time zone),
+whether or not that switch is on, since those are all a PNG has to set. A
+PNG is never opened for writing: its contents stay exactly as they were.
+These are the only two file dates macOS lets an app set; Finder's "Date
+Added" and "Last Opened" are kept by the system.
+
 Remove photos from the list (not from disk) with ⌘⌫ or the toolbar's −
 button; Photos › Clear List (⇧⌘⌫) empties it. Right-click a photo to use its
 date, show it in Finder or remove it from the list. Click a column heading to
@@ -52,6 +64,7 @@ sort.
 | all three dates | overwrites the 19 characters of each date where they are; nothing else in the file changes | same |
 | EXIF, but some dates missing | adds the missing dates to the EXIF data (below) | grows by about 100 bytes |
 | no EXIF at all | adds an EXIF block holding the three dates | grows by about 200 bytes |
+| is a PNG | sets the file's created and modified dates; the file isn't written | same (untouched) |
 
 When dates have to be added, nothing that is already in the EXIF data moves:
 the new dates, and new copies of the directories that list them, are added at

@@ -21,7 +21,7 @@ public enum DatesetterError: Error, Equatable, Sendable, LocalizedError {
         case .unreadable(let why):
             return "Couldn't read the file: \(why)"
         case .notAPhoto:
-            return "Not a JPEG or HEIC photo."
+            return "Not a JPEG, HEIC or PNG image."
         case .malformed(let what):
             return "The file looks damaged (\(what)). It was left unchanged."
         case .unsupportedLayout(let what):

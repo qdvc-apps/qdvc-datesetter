@@ -14,17 +14,27 @@ struct PhotoTable: View {
             .width(min: 180, ideal: 250)
 
             TableColumn("Date Taken", value: \.takenKey) { item in
-                DateCell(date: item.metadata?.original, known: item.metadata != nil)
+                DateCell(date: item.metadata?.original, metadata: item.metadata)
             }
             .width(min: 140, ideal: 150)
 
             TableColumn("Date Digitized", value: \.digitizedKey) { item in
-                DateCell(date: item.metadata?.digitized, known: item.metadata != nil)
+                DateCell(date: item.metadata?.digitized, metadata: item.metadata)
             }
             .width(min: 140, ideal: 150)
 
             TableColumn("Date Modified", value: \.modifiedKey) { item in
-                DateCell(date: item.metadata?.modified, known: item.metadata != nil)
+                DateCell(date: item.metadata?.modified, metadata: item.metadata)
+            }
+            .width(min: 140, ideal: 150)
+
+            TableColumn("File Created", value: \.fileCreatedKey) { item in
+                FileDateCell(date: item.fileDates?.created)
+            }
+            .width(min: 140, ideal: 150)
+
+            TableColumn("File Modified", value: \.fileModifiedKey) { item in
+                FileDateCell(date: item.fileDates?.modified)
             }
             .width(min: 140, ideal: 150)
 
@@ -82,18 +92,36 @@ private struct NameCell: View {
     }
 }
 
+/// An EXIF date: blank while the photo is being read (or if it can't be),
+/// "none" if the photo lacks it, "n/a" for a PNG (no EXIF dates at all).
 private struct DateCell: View {
     let date: ExifDateTime?
-    /// False while the photo is being read (or couldn't be): show nothing.
-    let known: Bool
+    let metadata: PhotoMetadata?
 
     var body: some View {
         if let date {
             Text(date.displayString)
                 .monospacedDigit()
-        } else if known {
+        } else if let metadata, !metadata.format.hasExifDates {
+            Text("n/a")
+                .foregroundStyle(.tertiary)
+                .help("PNG files have no EXIF dates; their file dates are set instead.")
+        } else if metadata != nil {
             Text("none")
                 .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// A file date, shown in this Mac's time zone.
+private struct FileDateCell: View {
+    let date: Date?
+
+    var body: some View {
+        if let local = PhotoItem.local(date) {
+            Text(local.displayString)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
         }
     }
 }

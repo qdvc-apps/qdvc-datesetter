@@ -3,13 +3,23 @@ import Foundation
 public enum PhotoFormat: String, Sendable, Hashable {
     case jpeg = "JPEG"
     case heif = "HEIC"
+    /// PNG has no EXIF dates here: only the file's own dates are set.
+    case png = "PNG"
 
-    /// The format from the file's contents (not its name).
+    static let pngSignature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+
+    /// The format from the file's contents (not its name). The first 256
+    /// bytes are enough.
     public static func detect(_ b: [UInt8]) throws -> PhotoFormat {
         if b.count >= 3, b[0] == 0xFF, b[1] == 0xD8, b[2] == 0xFF { return .jpeg }
+        if b.starts(with: pngSignature) { return .png }
         if HEIFLayout.isHEIF(b) { return .heif }
         throw DatesetterError.notAPhoto
     }
+
+    /// Whether the app writes EXIF dates into this format. For the others
+    /// it sets the file's created and modified dates only.
+    public var hasExifDates: Bool { self != .png }
 }
 
 /// How a photo's EXIF data was changed.
@@ -21,6 +31,9 @@ public enum UpdateMethod: Sendable, Equatable {
     case exifExtended
     /// The photo had no EXIF data; a new EXIF block was added.
     case exifCreated
+    /// A PNG: its contents were not touched; only the file's created and
+    /// modified dates were set.
+    case fileDatesOnly
 }
 
 /// The new contents of a photo, checked before anything is written.
@@ -60,6 +73,7 @@ public enum PhotoInspector {
         switch format {
         case .jpeg: tiff = try JPEGEditor.exifBlock(bytes)
         case .heif: tiff = try HEIFEditor.exifItem(try HEIFLayout(bytes))?.tiff
+        case .png: tiff = nil
         }
         return PhotoMetadata(format: format,
                              hasExif: tiff != nil,
@@ -70,8 +84,16 @@ public enum PhotoInspector {
     }
 
     public static func read(contentsOf url: URL) throws -> PhotoMetadata {
-        try read(PhotoFileUpdater.readBytes(url))
+        // A PNG is recognised from its first bytes; no need to read it all.
+        if try PhotoFormat.detect(PhotoFileUpdater.readHead(url)) == .png {
+            return pngMetadata
+        }
+        return try read(PhotoFileUpdater.readBytes(url))
     }
+
+    /// What a PNG reads as: no EXIF dates.
+    static let pngMetadata = PhotoMetadata(format: .png, hasExif: false, original: nil, digitized: nil,
+                                           modified: nil, offsetTimeOriginal: nil)
 }
 
 public enum DateWriter {
@@ -84,6 +106,7 @@ public enum DateWriter {
         switch try PhotoFormat.detect(bytes) {
         case .jpeg: plan = try JPEGEditor.plan(bytes, date: date)
         case .heif: plan = try HEIFEditor.plan(bytes, date: date)
+        case .png: throw DatesetterError.unsupportedLayout("PNG files have no EXIF dates")
         }
         try verify(plan, original: bytes, date: date)
         return plan
@@ -100,6 +123,8 @@ public enum DateWriter {
             guard try HEIFLayout(original).protectedContent() == HEIFLayout(plan.newBytes).protectedContent() else {
                 throw DatesetterError.verificationFailed("the image data would change")
             }
+        case .png:
+            throw DatesetterError.verificationFailed("PNG files are never rewritten")
         }
         // 2. The new dates read back.
         let metadata: PhotoMetadata
@@ -131,9 +156,34 @@ public struct UpdateResult: Sendable {
     /// Set when the file's created/modified dates were asked for but couldn't
     /// be set (the EXIF dates were still written).
     public let fileDatesError: String?
+    /// The file's dates as they now are.
+    public let fileDates: FileDates
+}
+
+/// The file's own dates, as Finder shows them.
+public struct FileDates: Sendable, Hashable {
+    public let created: Date?
+    public let modified: Date?
+
+    public static func read(_ url: URL) -> FileDates {
+        let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
+        return FileDates(created: values?.creationDate, modified: values?.contentModificationDate)
+    }
 }
 
 public enum PhotoFileUpdater {
+    /// The first `count` bytes of a file (enough to tell its format).
+    static func readHead(_ url: URL, count: Int = 256) throws -> [UInt8] {
+        guard url.isFileURL else { throw DatesetterError.notAFileURL }
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            return [UInt8](try handle.read(upToCount: count) ?? Data())
+        } catch {
+            throw DatesetterError.unreadable(error.localizedDescription)
+        }
+    }
+
     static func readBytes(_ url: URL) throws -> [UInt8] {
         guard url.isFileURL else { throw DatesetterError.notAFileURL }
         do {
@@ -152,8 +202,25 @@ public enum PhotoFileUpdater {
     /// With `matchFileDates`, the file's created and modified dates are then
     /// set to the same moment, read in the photo's own time zone
     /// (OffsetTimeOriginal) if it has one, otherwise in `fallbackTimeZone`.
+    ///
+    /// A PNG is never opened for writing: its created and modified dates are
+    /// set (whatever `matchFileDates` says, since they are all there is to
+    /// set), read in `fallbackTimeZone`.
     public static func setDate(_ date: ExifDateTime, of url: URL, matchFileDates: Bool,
                                fallbackTimeZone: TimeZone = .current) throws -> UpdateResult {
+        if try PhotoFormat.detect(readHead(url)) == .png {
+            guard let when = date.date(in: fallbackTimeZone) else {
+                throw DatesetterError.writeFailed("the date doesn't exist in this Mac's time zone")
+            }
+            do {
+                try setFileDates(when, of: url)
+            } catch {
+                throw DatesetterError.writeFailed(error.localizedDescription)
+            }
+            return UpdateResult(method: .fileDatesOnly, added: [], metadata: PhotoInspector.pngMetadata,
+                                fileDatesError: nil, fileDates: FileDates.read(url))
+        }
+
         let original = try readBytes(url)
         let plan = try DateWriter.plan(original, date: date)
 
@@ -198,7 +265,7 @@ public enum PhotoFileUpdater {
             }
         }
         return UpdateResult(method: plan.method, added: plan.added, metadata: metadata,
-                            fileDatesError: fileDatesError)
+                            fileDatesError: fileDatesError, fileDates: FileDates.read(url))
     }
 
     static func setFileDates(_ when: Date, of url: URL) throws {
@@ -212,7 +279,7 @@ public enum PhotoFileUpdater {
 
 /// Finds the photos among dropped or chosen files and folders.
 public enum PhotoScanner {
-    public static let extensions: Set<String> = ["jpg", "jpeg", "jpe", "jfif", "heic", "heif", "hif"]
+    public static let extensions: Set<String> = ["jpg", "jpeg", "jpe", "jfif", "heic", "heif", "hif", "png"]
 
     public struct Result: Sendable {
         public var photos: [URL] = []

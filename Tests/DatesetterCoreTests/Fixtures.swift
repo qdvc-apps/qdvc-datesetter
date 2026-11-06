@@ -178,6 +178,21 @@ enum Fixture {
         return ftyp + meta(imageOffset: imageOffset, exifOffset: exifOffset) + mdat
     }
 
+    // MARK: PNG
+
+    /// A tiny PNG: signature, IHDR, IDAT, IEND. (CRCs are placeholders: the
+    /// app only ever looks at the signature.)
+    static func png() -> [UInt8] {
+        func chunk(_ type: String, _ data: [UInt8]) -> [UInt8] {
+            Bytes.u32(UInt32(data.count)) + Array(type.utf8) + data + [0xDE, 0xAD, 0xBE, 0xEF]
+        }
+        var out = PhotoFormat.pngSignature
+        out += chunk("IHDR", Bytes.u32(4) + Bytes.u32(3) + [8, 2, 0, 0, 0])
+        out += chunk("IDAT", image)
+        out += chunk("IEND", [])
+        return out
+    }
+
     /// An Apple-style EXIF item payload: offset 6, "Exif\0\0", TIFF.
     static func exifItem(_ tiff: [UInt8]) -> [UInt8] {
         Bytes.u32(6) + Array("Exif".utf8) + [0, 0] + tiff
