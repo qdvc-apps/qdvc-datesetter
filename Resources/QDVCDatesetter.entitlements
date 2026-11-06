@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	App Sandbox, with no network entitlement: macOS itself refuses any
+	network connection the app might try to make. Files are reachable only
+	when the user drops them on the app or chooses them in the Open panel.
+	Never add a network entitlement (client or server) here:
+	scripts/check-no-network.sh fails the build if one is present.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+</dict>
+</plist>
