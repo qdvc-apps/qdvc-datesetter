@@ -21,11 +21,9 @@ struct DatePanel: View {
                     .onSubmit { model.normaliseDateText() }
                     .help("Type the date as YYYY-MM-DD HH:MM:SS. YYYY-MM-DD HH:MM and YYYY-MM-DD also work; missing parts of the time are 00.")
 
-                DatePicker("New date", selection: $model.pickerDate,
-                           displayedComponents: [.date, .hourMinuteAndSecond])
-                    .labelsHidden()
-                    .datePickerStyle(.stepperField)
-                    .environment(\.timeZone, AppModel.pickerTimeZone)
+                DateTimeStepper(date: $model.pickerDate, timeZone: AppModel.pickerTimeZone)
+                    .fixedSize()
+                    .help("Step the date and time, down to the second")
 
                 Button {
                     showCalendar.toggle()

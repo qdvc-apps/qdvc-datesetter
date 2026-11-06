@@ -44,7 +44,11 @@ its place.
 The new date is held as text (`AppModel.dateText`). The text field edits it
 directly; the stepper and the calendar edit it through `pickerDate`, which
 reads and writes the text in UTC, so the pickers show exactly the
-wall-clock reading typed and daylight-saving gaps can't shift it. An invalid
+wall-clock reading typed and daylight-saving gaps can't shift it. The
+stepper is AppKit's NSDatePicker (`DateTimeStepper`), because SwiftUI's
+DatePicker can't show seconds on macOS (`.hourMinuteAndSecond` is
+unavailable there); the calendar popover is SwiftUI's graphical DatePicker,
+for the day only. An invalid
 entry shows a red hint and disables the button; the pickers then keep the
 last valid date.
 

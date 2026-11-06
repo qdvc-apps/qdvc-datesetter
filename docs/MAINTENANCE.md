@@ -92,7 +92,9 @@ The app (`QDVCDatesetter`): `DatesetterApp` (window, delegate: Dock drops,
 no quitting mid-write; menus), `AppModel` (photos, the date text, adding
 and reading, applying with progress; `@Observable`, main actor; `Paths`),
 `ContentView` (drop target, toolbar, Open panel, alerts, `DropPrompt`),
-`PhotoTable`, `DatePanel`, `Thumbnail` (ImageIO, cached).
+`PhotoTable`, `DatePanel`, `DateTimeStepper` (an NSDatePicker with seconds:
+SwiftUI's DatePicker has no seconds on macOS), `Thumbnail` (ImageIO,
+cached).
 
 Work on files runs in detached tasks, one photo at a time; results come back
 to the main actor. Errors cross as `DatesetterError` (Sendable).
